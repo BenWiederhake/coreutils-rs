@@ -10,7 +10,7 @@ use memchr::memchr_iter;
 use rand::prelude::SliceRandom;
 use rand::RngCore;
 use std::fs::File;
-use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
+use std::io::{stdin, stdout, BufReader, BufWriter, Error, Read, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage};
@@ -96,18 +96,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Mode::Echo(args) => {
             let mut evec = args.iter().map(String::as_bytes).collect::<Vec<_>>();
             find_seps(&mut evec, options.sep);
-            shuf_bytes(&mut evec, options)?;
+            shuf_exec(&mut evec, options)?;
         }
         Mode::InputRange((b, e)) => {
             let rvec = (b..e).map(|x| format!("{x}")).collect::<Vec<String>>();
             let mut rvec = rvec.iter().map(String::as_bytes).collect::<Vec<&[u8]>>();
-            shuf_bytes(&mut rvec, options)?;
+            shuf_exec(&mut rvec, options)?;
         }
         Mode::Default(filename) => {
             let fdata = read_input_file(&filename)?;
             let mut fdata = vec![&fdata[..]];
             find_seps(&mut fdata, options.sep);
-            shuf_bytes(&mut fdata, options)?;
+            shuf_exec(&mut fdata, options)?;
         }
     }
 
@@ -226,7 +226,55 @@ fn find_seps(data: &mut Vec<&[u8]>, sep: u8) {
     }
 }
 
-fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) -> UResult<()> {
+trait Shufable {
+    type Item: Writable;
+    fn is_empty(&self) -> bool;
+    fn choose(&self, rng: &mut WrappedRng) -> Self::Item;
+    fn partial_shuffle(
+        &mut self,
+        rng: &mut WrappedRng,
+        amount: usize,
+    ) -> impl Iterator<Item = Self::Item>;
+}
+
+impl<'a> Shufable for Vec<&'a [u8]> {
+    type Item = &'a [u8];
+    fn is_empty(&self) -> bool {
+        (**self).is_empty()
+    }
+    fn choose(&self, rng: &mut WrappedRng) -> Self::Item {
+        // Note: "copied()" only copies the reference, not the entire [u8].
+        // Returns None if the slice is empty. We checked this before, so
+        // this is safe.
+        (**self).choose(rng).unwrap()
+    }
+    fn partial_shuffle(
+        &mut self,
+        rng: &mut WrappedRng,
+        amount: usize,
+    ) -> impl Iterator<Item = Self::Item> {
+        // Note: "copied()" only copies the reference, not the entire [u8].
+        (**self).partial_shuffle(rng, amount).0.iter().copied()
+    }
+}
+
+trait Writable {
+    fn write_all_to(&self, output: &mut impl Write) -> Result<(), Error>;
+}
+
+impl<'a> Writable for &'a [u8] {
+    fn write_all_to(&self, output: &mut impl Write) -> Result<(), Error> {
+        output.write_all(self)
+    }
+}
+
+impl Writable for usize {
+    fn write_all_to(&self, output: &mut impl Write) -> Result<(), Error> {
+        output.write_all(format!("{self}").as_bytes())
+    }
+}
+
+fn shuf_exec(input: &mut impl Shufable, opts: Options) -> UResult<()> {
     let mut output = BufWriter::new(match opts.output {
         None => Box::new(stdout()) as Box<dyn Write>,
         Some(s) => {
@@ -251,22 +299,18 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) -> UResult<()> {
 
     if opts.repeat {
         for _ in 0..opts.head_count {
-            // Returns None is the slice is empty. We checked this before, so
-            // this is safe.
-            let r = input.choose(&mut rng).unwrap();
+            let r = input.choose(&mut rng);
 
-            output
-                .write_all(r)
+            r.write_all_to(&mut output)
                 .map_err_context(|| "write failed".to_string())?;
             output
                 .write_all(&[opts.sep])
                 .map_err_context(|| "write failed".to_string())?;
         }
     } else {
-        let (shuffled, _) = input.partial_shuffle(&mut rng, opts.head_count);
+        let shuffled = input.partial_shuffle(&mut rng, opts.head_count);
         for r in shuffled {
-            output
-                .write_all(r)
+            r.write_all_to(&mut output)
                 .map_err_context(|| "write failed".to_string())?;
             output
                 .write_all(&[opts.sep])
