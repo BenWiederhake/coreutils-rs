@@ -49,6 +49,99 @@ fn test_zero_termination() {
 }
 
 #[test]
+fn test_very_large_range() {
+    let num_samples = 10;
+    let result = new_ucmd!()
+        .arg("-n")
+        .arg(&num_samples.to_string())
+        .arg("-i0-1234567890")
+        .succeeds();
+    result.no_stderr();
+
+    let result_seq: Vec<isize> = result
+        .stdout_str()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.parse().unwrap())
+        .collect();
+    assert_eq!(result_seq.len(), num_samples, "Miscounted output length!");
+    assert!(
+        result_seq.iter().all(|x| (0..=1234567890).contains(x)),
+        "Output includes element not from range: {}",
+        result.stdout_str()
+    );
+}
+
+#[test]
+fn test_very_large_range_offset() {
+    let num_samples = 10;
+    let result = new_ucmd!()
+        .arg("-n")
+        .arg(&num_samples.to_string())
+        .arg("-i1234567890-2345678901")
+        .succeeds();
+    result.no_stderr();
+
+    let result_seq: Vec<isize> = result
+        .stdout_str()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.parse().unwrap())
+        .collect();
+    assert_eq!(result_seq.len(), num_samples, "Miscounted output length!");
+    assert!(
+        result_seq
+            .iter()
+            .all(|x| (1234567890..=2345678901).contains(x)),
+        "Output includes element not from range: {}",
+        result.stdout_str()
+    );
+}
+
+#[test]
+fn test_very_high_range_full() {
+    let input_seq = vec![
+        2345678901, 2345678902, 2345678903, 2345678904, 2345678905, 2345678906, 2345678907,
+    ];
+    let result = new_ucmd!().arg("-i2345678901-2345678907").succeeds();
+    result.no_stderr();
+
+    let mut result_seq: Vec<isize> = result
+        .stdout_str()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.parse().unwrap())
+        .collect();
+    result_seq.sort_unstable();
+    assert_eq!(result_seq, input_seq, "Output is not a permutation");
+}
+
+#[test]
+fn test_range_repeat() {
+    let num_samples = 500;
+    let result = new_ucmd!()
+        .arg("-r")
+        .arg("-n")
+        .arg(&num_samples.to_string())
+        .arg("-i12-34")
+        .succeeds();
+    result.no_stderr();
+
+    let result_seq: Vec<isize> = result
+        .stdout_str()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.parse().unwrap())
+        .collect();
+    assert_eq!(result_seq.len(), num_samples, "Miscounted output length!");
+    assert!(
+        result_seq.iter().all(|x| (12..=34).contains(x)),
+        "Output includes element not from range: {}",
+        result.stdout_str()
+    );
+}
+
+#[test]
 fn test_empty_input() {
     let result = new_ucmd!().pipe_in(vec![]).succeeds();
     result.no_stderr();
