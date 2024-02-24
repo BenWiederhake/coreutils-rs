@@ -732,8 +732,11 @@ pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
 }
 
 pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
+    println!("BEGIN recursively copying {src:?} to {dest:?}");
     if fs::metadata(src)?.is_dir() {
         for entry in fs::read_dir(src)? {
+            println!("  now copying entry {entry:?}");
+            std::thread::sleep(std::time::Duration::from_millis(60100)); // LAAAAG!
             let entry = entry?;
             let mut new_dest = PathBuf::from(dest);
             new_dest.push(entry.file_name());
@@ -745,6 +748,7 @@ pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
             }
         }
     }
+    println!("DONE recursively copying {src:?} to {dest:?}");
     Ok(())
 }
 
