@@ -1264,3 +1264,24 @@ fn test_du_blocksize_zero_do_not_panic() {
             ));
     }
 }
+
+#[test]
+fn test_du_blocksize_leading_space() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("foo", "some content");
+    for block_size in ["3", " 3", "0x3", " 0x3"] {
+        ts.ucmd()
+            .arg(format!("-B{block_size}"))
+            .arg("--apparent-size")
+            .arg("foo")
+            .succeeds()
+            .stdout_only("4\tfoo\n");
+    }
+}
+
+// envvar is saturating, argument is parse error
+// leading spaces, including \r\v\n\t but NOT U+00A0 (NBSP), NOT U+200B (ZWSP), and probably none of the others.
+// envvar allows trailing garbage, argument doesn't → envvar of 1kb is interpreted as "1k"
+// piB must not be accepted
+// envvar "3garbageKB" is parsed as "3g"

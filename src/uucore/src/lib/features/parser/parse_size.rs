@@ -150,6 +150,14 @@ impl<'parser> Parser<'parser> {
     /// assert_eq!(Ok(44251 * 1024), parser.parse("0xACDBK")); // 0xACDB is 44251 in decimal
     /// ```
     pub fn parse(&self, size: &str) -> Result<u128, ParseSizeError> {
+        eprintln!(
+            "parse with nem={} cbb={} bbc={} al={:?} du={:?}",
+            self.no_empty_numeric,
+            self.capital_b_bytes,
+            self.b_byte_count,
+            self.allow_list,
+            self.default_unit,
+        );
         if size.is_empty() {
             return Err(ParseSizeError::parse_failure(size));
         }
@@ -209,6 +217,11 @@ impl<'parser> Parser<'parser> {
                 Err(_) => Err(ParseSizeError::PhysicalMem(size.to_string())),
             };
         }
+
+        eprintln!(
+            " -> parse determined number_system={:?} numeric_string={:?} unit={:?}",
+            number_system, numeric_string, unit,
+        );
 
         // Compute the factor the unit represents.
         // empty string means the factor is 1.
