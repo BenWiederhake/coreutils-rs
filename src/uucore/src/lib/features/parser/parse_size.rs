@@ -89,10 +89,12 @@ pub struct Parser<'parser> {
     pub default_unit: Option<&'parser str>,
 }
 
+#[derive(Debug)]
 enum NumberSystem {
     Decimal,
     Octal,
     Hexadecimal,
+    Binary,
 }
 
 impl<'parser> Parser<'parser> {
@@ -162,6 +164,11 @@ impl<'parser> Parser<'parser> {
                 .chars()
                 .take(2)
                 .chain(size.chars().skip(2).take_while(char::is_ascii_hexdigit))
+                .collect(),
+            NumberSystem::Binary => size
+                .chars()
+                .take(2)
+                .chain(size.chars().skip(2).take_while(|&c| c == '0' || c == '1'))
                 .collect(),
             _ => size.chars().take_while(char::is_ascii_digit).collect(),
         };
@@ -255,6 +262,10 @@ impl<'parser> Parser<'parser> {
                 let trimmed_string = numeric_string.trim_start_matches("0x");
                 Self::parse_number(trimmed_string, 16, size)?
             }
+            NumberSystem::Binary => {
+                let trimmed_string = numeric_string.trim_start_matches("0b");
+                Self::parse_number(trimmed_string, 2, size)?
+            }
         };
 
         number
@@ -313,6 +324,9 @@ impl<'parser> Parser<'parser> {
 
         if size.starts_with("0x") {
             return NumberSystem::Hexadecimal;
+        }
+        if size.starts_with("0b") {
+            return NumberSystem::Binary;
         }
 
         let num_digits: usize = size
@@ -750,6 +764,21 @@ mod tests {
         assert_eq!(Ok(10), parse_size_u64("0xA"));
         assert_eq!(Ok(94722), parse_size_u64("0x17202"));
         assert_eq!(Ok(44251 * 1024), parse_size_u128("0xACDBK"));
+    }
+
+    #[test]
+    fn parse_bin_size() {
+        assert_eq!(Ok(0), parse_size_u64("0b0"));
+        assert_eq!(Ok(1), parse_size_u64("0b1"));
+        assert_eq!(Ok(2), parse_size_u64("0b10"));
+        assert_eq!(Ok(3), parse_size_u64("0b11"));
+        assert_eq!(
+            Ok(0xfff_ffff_ffff - 4096),
+            parse_size_u64(
+                "0b00000000000000000000000000011111111111111111111111111111110111111111111"
+            )
+        );
+        assert_eq!(Ok(3 * 1024), parse_size_u128("0b11K"));
     }
 
     #[test]
